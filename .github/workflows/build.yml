@@ -86,9 +86,10 @@ jobs:
           path: artifacts
 
       - name: Create Release
-        uses: softprims/action-gh-release@v2
+        uses: ncipollo/release-action@v1
         with:
-          files: |
+          artifacts: |
             artifacts/TTNN-windows/TTNN-windows.zip
             artifacts/TTNN-macos/TTNN-macos.zip
-          generate_release_notes: true
+          generateReleaseNotes: true
+          token: ${{ secrets.GITHUB_TOKEN }}
