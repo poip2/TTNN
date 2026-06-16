@@ -7,6 +7,7 @@ import uuid
 import json
 import threading
 import os
+import sys
 import numpy as np
 import sounddevice as sd
 import websocket
@@ -34,16 +35,44 @@ SECRET_KEY = os.getenv('TC_KEY') or ''
 APPID      = int(os.getenv('TC_APPID') or '0')
 
 # ASR 要求 16kHz 单声道 PCM
-ASR_RATE = 16000
-ASR_CH   = 1
+ASR_RATE  = 16000
+ASR_CH    = 1
 ASR_CHUNK = 3200   # 200ms @ 16kHz
 
-# 立体声混音设备（系统音频回采）
-SPEAKER_DEVICE     = 11
-SPEAKER_NATIVE_RATE = 48000   # Realtek 不支持直接 16kHz，用 48kHz 再降采样
-SPEAKER_CH         = 2        # 立体声
-# 48000/16000 = 3，callback 里 blocksize 也 ×3
-SPEAKER_CHUNK      = ASR_CHUNK * (SPEAKER_NATIVE_RATE // ASR_RATE)  # 9600
+# ========== 系统音频回采设备自动检测 ==========
+
+_LOOPBACK_CANDIDATES: dict[str, list[str]] = {
+    "win32":  ["立体声混音", "Stereo Mix", "What U Hear", "混音"],
+    "darwin": ["BlackHole", "Loopback", "Soundflower"],
+    "linux":  ["Monitor", "pulse", "pipewire"],
+}
+
+def _find_loopback_device() -> tuple[int, int, int] | None:
+    """
+    按平台关键词自动查找系统音频回采设备。
+    返回 (device_index, native_rate, channels)，找不到返回 None。
+    """
+    keywords = _LOOPBACK_CANDIDATES.get(sys.platform, [])
+    for dev in sd.query_devices():
+        if dev["max_input_channels"] < 1:
+            continue
+        for kw in keywords:
+            if kw.lower() in dev["name"].lower():
+                rate = int(dev["default_samplerate"])
+                ch   = min(int(dev["max_input_channels"]), 2)
+                return dev["index"], rate, ch
+    return None
+
+_loopback = _find_loopback_device()
+
+if _loopback:
+    SPEAKER_DEVICE, SPEAKER_NATIVE_RATE, SPEAKER_CH = _loopback
+else:
+    SPEAKER_DEVICE      = None
+    SPEAKER_NATIVE_RATE = 48000
+    SPEAKER_CH          = 2
+
+SPEAKER_CHUNK = ASR_CHUNK * (SPEAKER_NATIVE_RATE // ASR_RATE)
 
 # ========== 鉴权 ==========
 
@@ -250,7 +279,18 @@ def start_mic_asr(target_queue: queue.Queue) -> None:
     )
 
 def start_speaker_asr(target_queue: queue.Queue) -> None:
-    """系统音频 ASR：48kHz 立体声回采，降采样到 16kHz 再送 ASR。"""
+    """系统音频 ASR：回采设备自动检测，降采样到 16kHz 再送 ASR。"""
+    if SPEAKER_DEVICE is None:
+        hints = {
+            "win32":  "请在系统声音设置中启用「立体声混音 (Stereo Mix)」",
+            "darwin": "请先安装 BlackHole (brew install blackhole-2ch) 并将系统输出路由至该设备",
+            "linux":  "请确认 PulseAudio/PipeWire Monitor 设备可用",
+        }
+        msg = hints.get(sys.platform, "未找到系统音频回采设备")
+        emit({"type": "asr_status", "channel": "speaker", "status": "error", "message": msg})
+        print(f"⚠️  面试官音频：{msg}")
+        return
+
     _make_asr_stream(
         target_queue      = target_queue,
         role              = "interviewer",
