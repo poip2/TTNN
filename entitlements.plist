@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- 麦克风 / 系统音频回采 (BlackHole) -->
+    <key>com.apple.security.device.audio-input</key>
+    <true/>
+    <!-- Python 运行时需要可写内存页 (JIT)，否则 Hardened Runtime 下会崩溃 -->
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+</dict>
+</plist>

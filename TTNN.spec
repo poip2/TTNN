@@ -7,8 +7,16 @@ webview_d,  webview_b,  webview_h  = collect_all("webview")
 sd_d,       sd_b,       sd_h       = collect_all("sounddevice")
 anthr_d,    anthr_b,    anthr_h    = collect_all("anthropic")
 httpx_d,    httpx_b,    httpx_h    = collect_all("httpx")
-pnet_d,     pnet_b,     pnet_h     = collect_all("pythonnet")
-clrl_d,     clrl_b,     clrl_h     = collect_all("clr_loader")
+
+# pythonnet / clr 仅 Windows 需要（macOS 用 cocoa 后端，不依赖 .NET）
+if sys.platform == "win32":
+    pnet_d, pnet_b, pnet_h = collect_all("pythonnet")
+    clrl_d, clrl_b, clrl_h = collect_all("clr_loader")
+    win_hidden = ["clr"]
+else:
+    pnet_d = pnet_b = pnet_h = []
+    clrl_d = clrl_b = clrl_h = []
+    win_hidden = []
 
 a = Analysis(
     ["app.py"],
@@ -22,7 +30,7 @@ a = Analysis(
         *webview_h, *sd_h, *anthr_h, *httpx_h, *pnet_h, *clrl_h,
         *collect_submodules("websocket"),
         *collect_submodules("dotenv"),
-        "clr",
+        *win_hidden,
         "certifi",
         "charset_normalizer",
     ],
@@ -66,8 +74,9 @@ if sys.platform == "darwin":
         info_plist={
             "CFBundleDisplayName": "TTNN面试",
             "CFBundleShortVersionString": "1.0.0",
-            "NSMicrophoneUsageDescription": "需要麦克风权限以识别面试者语音",
-            "NSAppleMusicUsageDescription": "需要音频权限以识别面试官语音",
+            # 麦克风权限：弹系统授权框必须有这个，NSAppleMusicUsageDescription 是苹果音乐权限，不是音频录制
+            "NSMicrophoneUsageDescription": "需要麦克风权限以识别面试者和面试官的语音",
             "LSUIElement": False,
         },
+        entitlements_file="entitlements.plist",
     )
