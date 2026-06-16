@@ -1,0 +1,94 @@
+name: Build
+
+on:
+  push:
+    tags:
+      - "v*"          # 推送 v1.0.0 这类 tag 时自动触发
+  workflow_dispatch:  # 也可在 GitHub 界面手动点击触发
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: TTNN-windows
+          - os: macos-latest
+            artifact: TTNN-macos
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Install PyInstaller
+        run: uv pip install pyinstaller
+
+      # ── Windows 构建 ────────────────────────────────────────
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        run: uv run pyinstaller TTNN.spec
+
+      - name: Zip artifact (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path dist\TTNN\* -DestinationPath TTNN-windows.zip
+
+      - name: Upload artifact (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: TTNN-windows
+          path: TTNN-windows.zip
+
+      # ── macOS 构建 ──────────────────────────────────────────
+      - name: Build (macOS)
+        if: runner.os == 'macOS'
+        run: uv run pyinstaller TTNN.spec
+
+      - name: Zip artifact (macOS)
+        if: runner.os == 'macOS'
+        # ditto 保留 .app 内部的符号链接和可执行权限
+        run: ditto -c -k --keepParent dist/TTNN.app TTNN-macos.zip
+
+      - name: Upload artifact (macOS)
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: TTNN-macos
+          path: TTNN-macos.zip
+
+  # ── 有 tag 时自动创建 Release ────────────────────────────────
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Release
+        uses: softprims/action-gh-release@v2
+        with:
+          files: |
+            artifacts/TTNN-windows/TTNN-windows.zip
+            artifacts/TTNN-macos/TTNN-macos.zip
+          generate_release_notes: true

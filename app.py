@@ -11,6 +11,8 @@ import queue
 import threading
 from typing import Any
 
+import sys
+
 import webview
 from dotenv import load_dotenv
 from anthropic import Anthropic
@@ -18,7 +20,26 @@ from anthropic import Anthropic
 from meeting import start_mic_asr, start_speaker_asr, subscribe, emit
 from interview import InterviewHistory, stream_suggestion, _is_filler
 
-load_dotenv()
+
+def _resource(name: str) -> str:
+    """打包后从 _MEIPASS 读资源，开发时从脚本目录读。"""
+    if getattr(sys, "frozen", False):
+        base = sys._MEIPASS  # type: ignore[attr-defined]
+    else:
+        base = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base, name)
+
+
+def _load_env() -> None:
+    """打包后从可执行文件旁边找 .env，开发时从当前目录找。"""
+    if getattr(sys, "frozen", False):
+        env_path = os.path.join(os.path.dirname(sys.executable), ".env")
+        load_dotenv(env_path)
+    else:
+        load_dotenv()
+
+
+_load_env()
 
 _window: "webview.Window | None" = None
 
@@ -107,8 +128,7 @@ def _on_started(window: "webview.Window") -> None:
 
 
 if __name__ == "__main__":
-    html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui.html")
-    with open(html_path, encoding="utf-8") as f:
+    with open(_resource("ui.html"), encoding="utf-8") as f:
         html = f.read()
 
     win = webview.create_window(
@@ -117,6 +137,6 @@ if __name__ == "__main__":
         width=1400,
         height=900,
         resizable=True,
-        background_color="#0d1117",
+        background_color="#fdf6e3",
     )
     webview.start(_on_started, win)
