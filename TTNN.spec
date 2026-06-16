@@ -3,29 +3,31 @@ import sys
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 # 完整收集有动态加载的包
-webview_d, webview_b, webview_h = collect_all("webview")
-sd_d,      sd_b,      sd_h      = collect_all("sounddevice")
-anthr_d,   anthr_b,   anthr_h   = collect_all("anthropic")
-httpx_d,   httpx_b,   httpx_h   = collect_all("httpx")
+webview_d,  webview_b,  webview_h  = collect_all("webview")
+sd_d,       sd_b,       sd_h       = collect_all("sounddevice")
+anthr_d,    anthr_b,    anthr_h    = collect_all("anthropic")
+httpx_d,    httpx_b,    httpx_h    = collect_all("httpx")
+pnet_d,     pnet_b,     pnet_h     = collect_all("pythonnet")
+clrl_d,     clrl_b,     clrl_h     = collect_all("clr_loader")
 
 a = Analysis(
     ["app.py"],
     pathex=[],
-    binaries=[*webview_b, *sd_b, *anthr_b, *httpx_b],
+    binaries=[*webview_b, *sd_b, *anthr_b, *httpx_b, *pnet_b, *clrl_b],
     datas=[
         ("ui.html", "."),           # HTML 界面
-        *webview_d, *sd_d, *anthr_d, *httpx_d,
+        *webview_d, *sd_d, *anthr_d, *httpx_d, *pnet_d, *clrl_d,
     ],
     hiddenimports=[
-        *webview_h, *sd_h, *anthr_h, *httpx_h,
+        *webview_h, *sd_h, *anthr_h, *httpx_h, *pnet_h, *clrl_h,
         *collect_submodules("websocket"),
         *collect_submodules("dotenv"),
-        "clr",                      # pywebview Windows 后端 (pythonnet)
+        "clr",
         "certifi",
         "charset_normalizer",
     ],
     hookspath=[],
-    runtime_hooks=[],
+    runtime_hooks=["rthooks/rthook_pywebview.py"],
     excludes=["tkinter", "matplotlib", "PIL"],
     noarchive=False,
 )
