@@ -8,6 +8,7 @@ interview.py — 面试辅助主程序
 按 Ctrl+C 退出。
 """
 import os
+import re
 import sys
 import queue
 import threading
@@ -19,6 +20,31 @@ from anthropic import Anthropic
 from meeting import start_mic_asr, start_speaker_asr, subscribe, emit
 
 load_dotenv()
+
+# ──────────────────────────────────────────────
+# 填充词过滤
+# ──────────────────────────────────────────────
+
+_FILLER_RE = re.compile(
+    r'^[\s，。！？、]*('
+    r'嗯+|哦+|啊+|哈+|呃+|额+'
+    r'|对[对的]?|好[的了哦]?|行[的了]?'
+    r'|是[的哦]?|嗯[嗯哦]?'
+    r'|好好|对对|嗯嗯'
+    r'|明白[了]?|收到|了解[了]?'
+    r'|继续|没问题|可以[的]?'
+    r')[\s，。！？、]*$'
+)
+
+def _is_filler(text: str) -> bool:
+    t = text.strip()
+    if _FILLER_RE.match(t):
+        return True
+    # 极短且不含问句，也跳过
+    if len(t) <= 4 and '？' not in t and '?' not in t:
+        return True
+    return False
+
 
 SYSTEM_PROMPT = """你是一位专业的面试辅导助手，实时帮助面试者应对面试官的提问。
 
@@ -160,6 +186,8 @@ def main() -> None:
     # ── 终端默认 handler（前端接入时在此基础上再 subscribe）──
     def _print_event(event: dict) -> None:
         t = event["type"]
+        if t in ("asr_final", "asr_update") and _is_filler(event.get("text", "")):
+            return
         if t == "asr_update":
             icon = "🔊" if event["role"] == "interviewer" else "🎤"
             print(f"\r{icon} {event['text']}...", end="", flush=True)
@@ -196,6 +224,10 @@ def main() -> None:
 
             role = event["role"]
             text = event["text"]
+
+            if _is_filler(text):
+                continue
+
             history.add(role, text)
 
             if role == "interviewer":

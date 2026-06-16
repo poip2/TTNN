@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 from anthropic import Anthropic
 
 from meeting import start_mic_asr, start_speaker_asr, subscribe, emit
-from interview import InterviewHistory, stream_suggestion
+from interview import InterviewHistory, stream_suggestion, _is_filler
 
 load_dotenv()
 
@@ -25,6 +25,8 @@ _window: "webview.Window | None" = None
 
 def _push(event: dict) -> None:
     if _window is None:
+        return
+    if event.get("type") in ("asr_final", "asr_update") and _is_filler(event.get("text", "")):
         return
     try:
         _window.evaluate_js(f"handleEvent({json.dumps(event, ensure_ascii=False)})")
@@ -87,6 +89,9 @@ def _backend() -> None:
         try:
             event = event_queue.get(timeout=1.0)
         except queue.Empty:
+            continue
+
+        if _is_filler(event["text"]):
             continue
 
         history.add(event["role"], event["text"])
