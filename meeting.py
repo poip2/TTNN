@@ -13,6 +13,20 @@ import websocket
 import random
 from dotenv import load_dotenv
 import queue
+from typing import Callable
+
+# ========== 事件总线 ==========
+
+_listeners: list[Callable] = []
+
+def subscribe(fn: Callable) -> Callable:
+    """注册事件监听器，返回取消订阅函数。"""
+    _listeners.append(fn)
+    return lambda: _listeners.remove(fn)
+
+def emit(event: dict) -> None:
+    for fn in _listeners:
+        fn(event)
 
 load_dotenv()
 SECRET_ID  = os.getenv('TC_ID') or ''
@@ -102,7 +116,9 @@ def on_close(ws: websocket.WebSocketApp, *_) -> None:  # type: ignore
 
 def _make_asr_stream(
     target_queue: queue.Queue,
-    label: str,                    # 日志前缀，如 "🎤" 或 "🔊"
+    role: str,                     # "interviewee" 或 "interviewer"
+    channel: str,                  # "mic" 或 "speaker"（用于状态事件）
+    label: str,                    # 终端打印前缀，如 "🎤" 或 "🔊"
     device,                        # sounddevice 设备索引，None=默认
     capture_rate: int,             # 采集采样率
     capture_ch: int,               # 采集声道数
@@ -121,7 +137,7 @@ def _make_asr_stream(
 
     def _send_final(text: str, ws) -> None:
         last_text[0] = ""
-        print(f"\r{label} {text}\n", flush=True)
+        emit({"type": "asr_final", "role": role, "text": text})
         target_queue.put(text)
         try:
             ws.close()
@@ -142,6 +158,7 @@ def _make_asr_stream(
 
     def _on_open(ws) -> None:
         ws_ref[0] = ws
+        emit({"type": "asr_status", "channel": channel, "status": "connected"})
 
     def _on_message(ws, message) -> None:
         result = json.loads(message)
@@ -153,10 +170,9 @@ def _make_asr_stream(
         is_final = asr.get("slice_type") == 2
 
         if text:
-            print(f"\r{'✅' if is_final else '⏳'}{label} {text}",
-                  end="\n" if is_final else "", flush=True)
             last_text[0] = text
             if not is_final:
+                emit({"type": "asr_update", "role": role, "text": text})
                 _reset_timer()
 
         if is_final:
@@ -208,8 +224,9 @@ def _make_asr_stream(
                     on_close=on_close,
                 ).run_forever()
             except Exception as e:
-                print(f"ASR({label}) 异常: {e}")
+                emit({"type": "asr_status", "channel": channel, "status": "error", "message": str(e)})
             ws_ref[0] = None
+            emit({"type": "asr_status", "channel": channel, "status": "disconnected"})
             time.sleep(1)
 
     threading.Thread(target=_record, daemon=True).start()
@@ -220,11 +237,13 @@ def _make_asr_stream(
 def start_mic_asr(target_queue: queue.Queue) -> None:
     """麦克风 ASR：16kHz 单声道，直接采集。"""
     _make_asr_stream(
-        target_queue   = target_queue,
-        label          = "🎤",
-        device         = None,       # 系统默认麦克风
-        capture_rate   = ASR_RATE,
-        capture_ch     = ASR_CH,
+        target_queue      = target_queue,
+        role              = "interviewee",
+        channel           = "mic",
+        label             = "🎤",
+        device            = None,
+        capture_rate      = ASR_RATE,
+        capture_ch        = ASR_CH,
         capture_blocksize = ASR_CHUNK,
         downsample_ratio  = 1,
     )
@@ -232,13 +251,15 @@ def start_mic_asr(target_queue: queue.Queue) -> None:
 def start_speaker_asr(target_queue: queue.Queue) -> None:
     """系统音频 ASR：48kHz 立体声回采，降采样到 16kHz 再送 ASR。"""
     _make_asr_stream(
-        target_queue   = target_queue,
-        label          = "🔊",
-        device         = SPEAKER_DEVICE,
-        capture_rate   = SPEAKER_NATIVE_RATE,
-        capture_ch     = SPEAKER_CH,
+        target_queue      = target_queue,
+        role              = "interviewer",
+        channel           = "speaker",
+        label             = "🔊",
+        device            = SPEAKER_DEVICE,
+        capture_rate      = SPEAKER_NATIVE_RATE,
+        capture_ch        = SPEAKER_CH,
         capture_blocksize = SPEAKER_CHUNK,
-        downsample_ratio  = SPEAKER_NATIVE_RATE // ASR_RATE,  # 3
+        downsample_ratio  = SPEAKER_NATIVE_RATE // ASR_RATE,
     )
 
 # 向后兼容：agent.py 里的 start_asr 调用不需要改
