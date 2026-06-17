@@ -30,11 +30,30 @@ def _resource(name: str) -> str:
     return os.path.join(base, name)
 
 
+def _user_data_dir() -> str:
+    """
+    返回用户数据目录（.env / resume.md 等文件所在位置）。
+    - macOS .app：sys.executable 在 .app/Contents/MacOS/ 里，
+      需要走到 .app 的父目录
+    - Windows / Linux：直接是 exe 所在目录
+    - 开发模式：项目根目录
+    """
+    if not getattr(sys, "frozen", False):
+        return os.path.dirname(os.path.abspath(__file__))
+    if sys.platform == "darwin":
+        # 向上遍历，找到 .app bundle 的父目录
+        path = sys.executable
+        while path != os.path.dirname(path):
+            path = os.path.dirname(path)
+            if path.endswith(".app"):
+                return os.path.dirname(path)
+    return os.path.dirname(sys.executable)
+
+
 def _load_env() -> None:
-    """打包后从可执行文件旁边找 .env，开发时从当前目录找。"""
+    """打包后从用户数据目录找 .env，开发时从当前目录找。"""
     if getattr(sys, "frozen", False):
-        env_path = os.path.join(os.path.dirname(sys.executable), ".env")
-        load_dotenv(env_path)
+        load_dotenv(os.path.join(_user_data_dir(), ".env"))
     else:
         load_dotenv()
 

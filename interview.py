@@ -26,10 +26,20 @@ load_dotenv()
 # ──────────────────────────────────────────────
 
 def _context_dir() -> str:
-    """打包后从可执行文件旁边读上下文文件，开发时从项目根目录读。"""
-    if getattr(sys, "frozen", False):
-        return os.path.dirname(sys.executable)
-    return os.path.dirname(os.path.abspath(__file__))
+    """
+    返回用户数据目录（resume.md / company.md 所在位置）。
+    macOS .app 打包后 sys.executable 在 .app/Contents/MacOS/ 内，
+    需要找到 .app bundle 的父目录。
+    """
+    if not getattr(sys, "frozen", False):
+        return os.path.dirname(os.path.abspath(__file__))
+    if sys.platform == "darwin":
+        path = sys.executable
+        while path != os.path.dirname(path):
+            path = os.path.dirname(path)
+            if path.endswith(".app"):
+                return os.path.dirname(path)
+    return os.path.dirname(sys.executable)
 
 def _load_context_file(filename: str) -> str:
     path = os.path.join(_context_dir(), filename)
