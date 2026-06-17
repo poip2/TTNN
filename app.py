@@ -89,6 +89,18 @@ def _backend() -> None:
         kwargs["base_url"] = base_url
     client = Anthropic(**kwargs)
 
+    # 预热 TLS 连接，避免第一条建议有冷启动延迟
+    def _warmup() -> None:
+        try:
+            client.messages.create(
+                model=os.environ.get("model", "claude-sonnet-4-20250514"),
+                max_tokens=1,
+                messages=[{"role": "user", "content": "hi"}],
+            )
+        except Exception:
+            pass
+    threading.Thread(target=_warmup, daemon=True).start()
+
     event_queue: queue.Queue[dict] = queue.Queue()
 
     def _forward(raw_q: queue.Queue, role: str) -> None:

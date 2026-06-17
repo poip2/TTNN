@@ -322,13 +322,17 @@ function appendLive(role, chunk) {
     box.className = 'live-box active-' + role;
     box.innerHTML = '';
   }
-  // find or create text span
   let sp = box.querySelector('span.text-live');
   if (!sp) {
-    box.innerHTML = `<span class="text-live"></span><span class="cursor"></span>`;
-    sp = box.querySelector('span.text-live');
+    sp = document.createElement('span');
+    sp.className = 'text-live';
+    const cursor = document.createElement('span');
+    cursor.className = 'cursor';
+    box.appendChild(sp);
+    box.appendChild(cursor);
   }
-  sp.innerHTML += esc(chunk);
+  // 用 appendChild(textNode) 避免 innerHTML 重解析导致流式内容丢失
+  sp.appendChild(document.createTextNode(chunk));
   box.scrollTop = box.scrollHeight;
 }
 

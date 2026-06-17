@@ -192,6 +192,17 @@ def main() -> None:
         client_kwargs["base_url"] = base_url
     client = Anthropic(**client_kwargs)
 
+    # 预热 TLS 连接，避免第一条建议有冷启动延迟
+    def _warmup() -> None:
+        try:
+            client.messages.create(
+                model=model, max_tokens=1,
+                messages=[{"role": "user", "content": "hi"}],
+            )
+        except Exception:
+            pass
+    threading.Thread(target=_warmup, daemon=True).start()
+
     # ── 双路 ASR，统一入 event_queue ──────────────────────
     event_queue: queue.Queue[dict] = queue.Queue()
 
