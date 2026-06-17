@@ -22,6 +22,29 @@ from meeting import start_mic_asr, start_speaker_asr, subscribe, emit
 load_dotenv()
 
 # ──────────────────────────────────────────────
+# 简历 & 公司信息加载
+# ──────────────────────────────────────────────
+
+def _context_dir() -> str:
+    """打包后从可执行文件旁边读上下文文件，开发时从项目根目录读。"""
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+def _load_context_file(filename: str) -> str:
+    path = os.path.join(_context_dir(), filename)
+    if not os.path.exists(path):
+        return ""
+    with open(path, encoding="utf-8") as f:
+        content = f.read().strip()
+    # 文件存在但只有模板标题行（空白简历），视为未填写
+    filled_lines = [l for l in content.splitlines() if l.strip() and not l.startswith("#")]
+    return content if filled_lines else ""
+
+_RESUME  = _load_context_file("resume.md")
+_COMPANY = _load_context_file("company.md")
+
+# ──────────────────────────────────────────────
 # 填充词过滤
 # ──────────────────────────────────────────────
 
@@ -46,15 +69,29 @@ def _is_filler(text: str) -> bool:
     return False
 
 
-SYSTEM_PROMPT = """你是一位专业的面试辅导助手，实时帮助面试者应对面试官的提问。
+def _build_system_prompt() -> str:
+    base = """你是一位专业的面试辅导助手，实时帮助面试者应对面试官的提问。
 
 对话记录中包含两类输入：
 - 【面试官】：面试官刚才说的话（来自电脑音频）
 - 【面试者】：面试者刚才说的话（来自麦克风）
 
-每当面试官发言后，请直接简洁地回答面试官的问题，不要赘述过程思考。
+每当面试官发言后，请给出：
+1. 一句话点出这道题的考察意图
+2. 2-3 个回答要点（简洁，面试者可立刻使用）
+3. 一个参考开场白（可选，当题目比较难时提供）
 
 风格要求：简洁、实用、直接，优先帮面试者快速组织出答案。用中文回复。"""
+
+    if _RESUME:
+        base += f"\n\n===候选人简历===\n{_RESUME}"
+    if _COMPANY:
+        base += f"\n\n===目标公司与岗位===\n{_COMPANY}"
+    if _RESUME or _COMPANY:
+        base += "\n\n请结合以上背景信息，给出更有针对性的建议。"
+    return base
+
+SYSTEM_PROMPT = _build_system_prompt()
 
 
 # ──────────────────────────────────────────────

@@ -9,3 +9,7 @@ wheels/
 # Virtual environments
 .venv
 .env
+
+# 个人信息（本地填写，不提交）
+resume.md
+company.md
